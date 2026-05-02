@@ -1,60 +1,91 @@
+#include <Arduino.h>
 #include <WiFi.h>
+#include <WiFiUdp.h>
+#include <ArduinoJson.h>
+#include "config.h"
 
-void setup() {
-  Serial.begin(115200);
+WiFiUDP udp;
+char packetBuffer[256];
+unsigned long lastPacketTime = 0;
 
-  // Set WiFi to station mode
-  WiFi.mode(WIFI_STA);
-  WiFi.disconnect();  
-  delay(1000);
+// ── Motor control ────────────────────────────────────────────────
+void setMotor(uint8_t pinA, uint8_t pinB, uint8_t pwmCh, float speed) {
+    int pwm = (int)(abs(speed) * 255);
+    pwm = constrain(pwm, 0, 255);
 
-  Serial.println("WiFi scan started...");
+    if (speed > 0.02f) {
+        digitalWrite(pinA, HIGH);
+        digitalWrite(pinB, LOW);
+    } else if (speed < -0.02f) {
+        digitalWrite(pinA, LOW);
+        digitalWrite(pinB, HIGH);
+    } else {
+        digitalWrite(pinA, LOW);
+        digitalWrite(pinB, LOW);
+        pwm = 0;
+    }
+    ledcWrite(pwmCh, pwm);
 }
 
-void loop() {
-  Serial.println("Scanning nearby WiFi networks...");
+void stopMotors() {
+    setMotor(IN1, IN2, PWM_CH_L, 0);
+    setMotor(IN3, IN4, PWM_CH_R, 0);
+}
 
-  int n = WiFi.scanNetworks(); // returns number of networks found
+// ── Setup ─────────────────────────────────────────────────────────
+void setup() {
+    Serial.begin(115200);
 
-  if (n == 0) {
-    Serial.println("No networks found");
-  } else {
-    Serial.println("Networks found:");
-    for (int i = 0; i < n; i++) {
-      Serial.print(i + 1);
-      Serial.print(": ");
-      Serial.print(WiFi.SSID(i));        // Network name
-      Serial.print(" (Signal: ");
-      Serial.print(WiFi.RSSI(i));        // Signal strength
-      Serial.print(" dBm)");
-      
-      // Check encryption type
-      Serial.print("  Security: ");
-      switch (WiFi.encryptionType(i)) {
-        case WIFI_AUTH_OPEN:
-          Serial.println("Open");
-          break;
-        case WIFI_AUTH_WEP:
-          Serial.println("WEP");
-          break;
-        case WIFI_AUTH_WPA_PSK:
-          Serial.println("WPA PSK");
-          break;
-        case WIFI_AUTH_WPA2_PSK:
-          Serial.println("WPA2 PSK");
-          break;
-        case WIFI_AUTH_WPA_WPA2_PSK:
-          Serial.println("WPA/WPA2");
-          break;
-        default:
-          Serial.println("Unknown");
-          break;
-      }
+    // Motor pin modes
+    pinMode(IN1, OUTPUT); pinMode(IN2, OUTPUT);
+    pinMode(IN3, OUTPUT); pinMode(IN4, OUTPUT);
+
+    // PWM channels
+    ledcSetup(PWM_CH_L, PWM_FREQ, PWM_RES);
+    ledcSetup(PWM_CH_R, PWM_FREQ, PWM_RES);
+    ledcAttachPin(ENA, PWM_CH_L);
+    ledcAttachPin(ENB, PWM_CH_R);
+
+    stopMotors();
+
+    // Connect to WiFi
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    Serial.print("Connecting to WiFi");
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(500);
+        Serial.print(".");
     }
-  }
+    Serial.println();
+    Serial.print("Connected! IP: ");
+    Serial.println(WiFi.localIP());
 
-  Serial.println("-------------------------");
+    udp.begin(UDP_PORT);
+    Serial.printf("UDP server listening on port %d\n", UDP_PORT);
+}
 
-  WiFi.scanDelete(); // free memory
-  delay(5000);       // scan every 5 sec
+// ── Loop ──────────────────────────────────────────────────────────
+void loop() {
+    // Safety timeout — stop if Python script disconnects
+    if (millis() - lastPacketTime > PACKET_TIMEOUT_MS) {
+        stopMotors();
+    }
+
+    int packetSize = udp.parsePacket();
+    if (packetSize <= 0) return;
+
+    int len = udp.read(packetBuffer, sizeof(packetBuffer) - 1);
+    packetBuffer[len] = '\0';
+    lastPacketTime = millis();
+
+    StaticJsonDocument<64> doc;
+    if (deserializeJson(doc, packetBuffer) != DeserializationError::Ok) return;
+
+    float left  = doc["l"] | 0.0f;
+    float right = doc["r"] | 0.0f;
+
+    left  = constrain(left,  -1.0f, 1.0f);
+    right = constrain(right, -1.0f, 1.0f);
+
+    setMotor(IN1, IN2, PWM_CH_L, left);
+    setMotor(IN3, IN4, PWM_CH_R, right);
 }
