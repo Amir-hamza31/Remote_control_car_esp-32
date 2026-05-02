@@ -1,27 +1,25 @@
-#ifndef CONFIG_H
-#define CONFIG_H
+#pragma once
 
-// ── WiFi Configuration ────────────────────────────────────────────
-#define WIFI_SSID        "YOUR_WIFI_SSID"        // Change to your WiFi name
-#define WIFI_PASSWORD    "YOUR_WIFI_PASSWORD"    // Change to your WiFi password
-#define UDP_PORT         5005                    // UDP port for communication
-#define PACKET_TIMEOUT_MS 1000                   // Stop motors if no packet for 1 second
+// WiFi
+#define WIFI_SSID     "high ping"
+#define WIFI_PASSWORD "netnaibal"
 
-// ── Motor Pins (Adjust based on your wiring) ──────────────────────
-// LEFT MOTOR
-#define IN1   19   // Motor A direction pin 1
-#define IN2   21   // Motor A direction pin 2
-#define ENA   22   // Motor A PWM speed pin
+// UDP
+#define UDP_PORT 1234
 
-// RIGHT MOTOR
-#define IN3   23   // Motor B direction pin 1
-#define IN4   25   // Motor B direction pin 2
-#define ENB   26   // Motor B PWM speed pin
+// Motor pins
+#define IN1 25
+#define IN2 26
+#define IN3 27
+#define IN4 14
+#define ENA 32
+#define ENB 33
 
-// ── PWM Configuration ─────────────────────────────────────────────
-#define PWM_FREQ  5000   // PWM frequency in Hz
-#define PWM_RES   8      // PWM resolution (8-bit = 0-255)
-#define PWM_CH_L  0      // PWM channel for left motor
-#define PWM_CH_R  1      // PWM channel for right motor
+// PWM
+#define PWM_FREQ   1000
+#define PWM_RES    8      // 8-bit = 0–255
+#define PWM_CH_L   0
+#define PWM_CH_R   1
 
-#endif
+// Safety timeout (ms) — stop motors if no packet received
+#define PACKET_TIMEOUT_MS 500
